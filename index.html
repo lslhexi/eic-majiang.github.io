@@ -512,6 +512,16 @@
             React.createElement('path', { key: 'path2', d: 'M5 16h14v3H5v-3z' })
         ]);
 
+        const defaultFirebaseConfig = {
+            apiKey: "AIzaSyBvGOuImmwVJvMvzBFKjZjPtCLuc_DoLBw",
+            authDomain: "majiang-c2f8c.firebaseapp.com",
+            databaseURL: "https://majiang-c2f8c-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "majiang-c2f8c",
+            storageBucket: "majiang-c2f8c.firebasestorage.app",
+            messagingSenderId: "1091135402516",
+            appId: "1:1091135402516:web:ebdfc04c02ed8c8b2bed01"
+        };
+
         const MahjongScoreTracker = () => {
             const [players, setPlayers] = useState([]);
             const [newPlayerName, setNewPlayerName] = useState('');
@@ -524,15 +534,7 @@
             const [useFirebase, setUseFirebase] = useState(false);
             const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
             const [isSaving, setIsSaving] = useState(false); // 防止循环保存的标志
-            const [configInput, setConfigInput] = useState({
-                apiKey: '',
-                authDomain: '',
-                databaseURL: '',
-                projectId: '',
-                storageBucket: '',
-                messagingSenderId: '',
-                appId: ''
-            });
+            const [configInput, setConfigInput] = useState(defaultFirebaseConfig);
 
             // 初始化Firebase
             const initFirebase = (config) => {
