@@ -870,6 +870,11 @@
                 }
                 // 更新每个玩家的分数和统计
                 const updatedPlayers = players.map(player => {
+                    // 确保player是有效对象
+                    if (!player || typeof player !== 'object') {
+                        return null;
+                    }
+                    
                     const scoreInput = roundScores[player.id];
                     // 如果输入框为空或未定义，认为该玩家未参加本次游戏
                     const participated = scoreInput !== undefined && scoreInput !== null && scoreInput !== '';
@@ -881,7 +886,9 @@
                         
                         // 应用道具效果
                         let finalChange = validChange;
-                        let newItems = player.items ? { ...player.items } : { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
+                        let newItems = (player.items && typeof player.items === 'object' && !Array.isArray(player.items)) 
+                            ? { ...player.items } 
+                            : { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
                         let effectMessage = '';
 
                         // 双倍积分卡效果：无论输赢，使用一次后失效
@@ -970,11 +977,20 @@
                         };
                     } else {
                         // 未参加：不更新局数和胜场，VIP次数也不减少，只保留原有数据
+                        // 确保返回有效的对象
                         return {
-                            ...player
+                            id: player.id,
+                            name: player.name || '',
+                            score: player.score || 0,
+                            gameCount: player.gameCount || 0,
+                            winCount: player.winCount || 0,
+                            history: Array.isArray(player.history) ? player.history : [],
+                            items: (player.items && typeof player.items === 'object' && !Array.isArray(player.items)) 
+                                ? { ...player.items } 
+                                : { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 }
                         };
                     }
-                });
+                }).filter(p => p !== null && p !== undefined); // 过滤掉null和undefined值
                 setPlayers(updatedPlayers);
                 // 清空本局输入
                 setRoundScores(prev => {
