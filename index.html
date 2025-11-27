@@ -589,17 +589,31 @@
                         if (isSaving) return; // 如果正在保存，忽略这次更新
                         const data = snapshot.val();
                         if (data) {
-                            const playersArray = Array.isArray(data) ? data : Object.values(data);
-                            const playersWithItems = playersArray.map(p => {
-                                const items = p.items || { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
-                                if (typeof items.vip === 'boolean') {
-                                    items.vip = items.vip ? 3 : 0;
-                                }
-                                return { ...p, items: items };
-                            });
-                            setIsSaving(true);
-                            setPlayers(playersWithItems);
-                            setTimeout(() => setIsSaving(false), 100);
+                            let playersArray;
+                            if (Array.isArray(data)) {
+                                playersArray = data;
+                            } else if (typeof data === 'object' && data !== null) {
+                                playersArray = Object.values(data);
+                            } else {
+                                playersArray = [];
+                            }
+                            
+                            if (playersArray && playersArray.length > 0) {
+                                const playersWithItems = playersArray.map(p => {
+                                    if (!p || typeof p !== 'object') return null;
+                                    const items = p.items || { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
+                                    if (typeof items.vip === 'boolean') {
+                                        items.vip = items.vip ? 3 : 0;
+                                    }
+                                    return { ...p, items: items };
+                                }).filter(p => p !== null);
+                                
+                                setIsSaving(true);
+                                setPlayers(playersWithItems);
+                                setTimeout(() => setIsSaving(false), 100);
+                            } else {
+                                setPlayers([]);
+                            }
                         } else {
                             setPlayers([]);
                         }
@@ -664,9 +678,13 @@
                 // 同步roundScores: 确保新添加的玩家有输入框
                 setRoundScores(prev => {
                     const updated = {};
-                    players.forEach(p => {
-                        updated[p.id] = prev[p.id] !== undefined ? prev[p.id] : '';
-                    });
+                    if (Array.isArray(players)) {
+                        players.forEach(p => {
+                            if (p && p.id) {
+                                updated[p.id] = prev[p.id] !== undefined ? prev[p.id] : '';
+                            }
+                        });
+                    }
                     return updated;
                 });
             }, [players, isFirebaseReady, db, useFirebase, isSaving]);
@@ -787,7 +805,8 @@
             };
 
             const buyItem = (playerId, itemId) => {
-                const player = players.find(p => p.id === playerId);
+                if (!Array.isArray(players)) return;
+                const player = players.find(p => p && p.id === playerId);
                 if (!player) return;
 
                 const item = shopItems.find(i => i.id === itemId);
@@ -845,7 +864,7 @@
 
             const recordRound = () => {
                 // 确保至少有一个玩家存在
-                if (players.length === 0) {
+                if (!Array.isArray(players) || players.length === 0) {
                     alert('没有玩家可记录');
                     return;
                 }
@@ -959,7 +978,13 @@
                 // 清空本局输入
                 setRoundScores(prev => {
                     const cleared = {};
-                    players.forEach(p => cleared[p.id] = '');
+                    if (Array.isArray(players)) {
+                        players.forEach(p => {
+                            if (p && p.id) {
+                                cleared[p.id] = '';
+                            }
+                        });
+                    }
                     return cleared;
                 });
                 // 回合数加一
@@ -982,10 +1007,10 @@
                 }
             };
 
-            const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
-            const totalPlayers = players.length;
+            const sortedPlayers = (Array.isArray(players) ? [...players] : []).sort((a, b) => b.score - a.score);
+            const totalPlayers = Array.isArray(players) ? players.length : 0;
             const totalGames = roundCount;  // 以回合数表示总局数
-            const averageScore = totalPlayers > 0 ? (players.reduce((sum, player) => sum + player.score, 0) / totalPlayers).toFixed(1) : 0;
+            const averageScore = totalPlayers > 0 && Array.isArray(players) ? (players.reduce((sum, player) => sum + (player?.score || 0), 0) / totalPlayers).toFixed(1) : 0;
 
             return (
                 <div className="container">
