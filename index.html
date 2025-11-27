@@ -1479,8 +1479,9 @@
                                                     onClick={() => {
                                                         if (passcodeInput === ADMIN_PASSCODE) {
                                                             setIsAdmin(true);
+                                                            setFirebaseWriteEnabled(true);
                                                             setPasscodeInput('');
-                                                            alert('已切换为管理员模式，请酌情启用写入。');
+                                                            alert('已切换为管理员模式，并启用云端写入。');
                                                         } else {
                                                             alert('密码错误，请联系管理员。');
                                                         }
@@ -1496,6 +1497,7 @@
                                                 onClick={() => {
                                                     if (confirm('确定要退出管理员模式吗？退出后仅可读取数据。')) {
                                                         setIsAdmin(false);
+                                                        setFirebaseWriteEnabled(false);
                                                     }
                                                 }}
                                             >
