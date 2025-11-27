@@ -521,6 +521,7 @@
             messagingSenderId: "1091135402516",
             appId: "1:1091135402516:web:ebdfc04c02ed8c8b2bed01"
         };
+        const ADMIN_PASSCODE = 'lsysb';
 
         const MahjongScoreTracker = () => {
             const [players, setPlayers] = useState([]);
@@ -535,6 +536,11 @@
             const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
             const [isSaving, setIsSaving] = useState(false); // 防止循环保存的标志
             const [configInput, setConfigInput] = useState(defaultFirebaseConfig);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [passcodeInput, setPasscodeInput] = useState('');
+            const [currentUser, setCurrentUser] = useState({ role: 'visitor', playerId: null, username: '' });
+            const [authMode, setAuthMode] = useState('login'); // login | register
+            const [authForm, setAuthForm] = useState({ username: '', displayName: '', password: '', confirmPassword: '' });
 
             // 初始化Firebase
             const initFirebase = (config) => {
@@ -580,6 +586,14 @@
                 }
             }, []);
 
+            useEffect(() => {
+                if (currentUser.role === 'player' && currentUser.playerId) {
+                    setSelectedPlayerForShop(currentUser.playerId);
+                } else if (currentUser.role !== 'player') {
+                    setSelectedPlayerForShop(null);
+                }
+            }, [currentUser]);
+
             // 从Firebase或localStorage加载数据
             useEffect(() => {
                 if (isFirebaseReady && db) {
@@ -607,7 +621,12 @@
                                     if (typeof items.vip === 'boolean') {
                                         items.vip = items.vip ? 3 : 0;
                                     }
-                                    return { ...p, items: items };
+                                    return { 
+                                        ...p, 
+                                        items: items,
+                                        username: p.username || p.name || '',
+                                        password: p.password || ''
+                                    };
                                 }).filter(p => p !== null);
                                 
                                 setIsSaving(true);
@@ -645,7 +664,12 @@
                             if (typeof items.vip === 'boolean') {
                                 items.vip = items.vip ? 3 : 0;
                             }
-                            return { ...p, items: items };
+                            return { 
+                                ...p, 
+                                items: items,
+                                username: p.username || p.name || '',
+                                password: p.password || ''
+                            };
                         });
                         setPlayers(playersWithItems);
                     }
@@ -661,7 +685,9 @@
                 if (isSaving) return; // 如果正在从Firebase加载，不保存
                 if (players.length === 0 && !isFirebaseReady) return; // 初始加载时不保存空数组
 
-                if (isFirebaseReady && db && useFirebase) {
+                const canWriteFirebase = isAdmin || currentUser.role === 'player';
+
+                if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
                     // 保存到Firebase
                     setIsSaving(true);
                     db.ref('players').set(players).then(() => {
@@ -694,7 +720,8 @@
             // 保存回合数到Firebase或localStorage
             useEffect(() => {
                 if (isSaving) return;
-                if (isFirebaseReady && db && useFirebase) {
+                const canWriteFirebase = isAdmin || currentUser.role === 'player';
+                if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
                     setIsSaving(true);
                     db.ref('roundCount').set(roundCount).then(() => {
                         setTimeout(() => setIsSaving(false), 500);
@@ -769,6 +796,8 @@
                     const newPlayer = {
                         id: Date.now(),
                         name: newPlayerName.trim(),
+                        username: newPlayerName.trim(),
+                        password: '',
                         score: 0,
                         gameCount: 0,
                         winCount: 0,
@@ -783,6 +812,63 @@
                     setPlayers([...players, newPlayer]);
                     setNewPlayerName('');
                 }
+            };
+
+            const registerPlayer = () => {
+                if (!authForm.username.trim() || !authForm.password.trim()) {
+                    alert('请输入用户名和密码');
+                    return;
+                }
+                if (authForm.password !== authForm.confirmPassword) {
+                    alert('两次密码输入不一致');
+                    return;
+                }
+                if (players.find(p => (p.username || '').toLowerCase() === authForm.username.trim().toLowerCase())) {
+                    alert('该用户名已被注册');
+                    return;
+                }
+                const displayName = authForm.displayName.trim() || authForm.username.trim();
+                const newPlayer = {
+                    id: Date.now(),
+                    name: displayName,
+                    username: authForm.username.trim(),
+                    password: authForm.password,
+                    score: 0,
+                    gameCount: 0,
+                    winCount: 0,
+                    history: [],
+                    items: {
+                        doubleCard: false,
+                        protectCard: false,
+                        lossProtectCard: false,
+                        vip: 0
+                    }
+                };
+                setPlayers([...players, newPlayer]);
+                setAuthForm({ username: '', displayName: '', password: '', confirmPassword: '' });
+                setAuthMode('login');
+                alert('注册成功，请使用账号登录');
+            };
+
+            const loginPlayer = () => {
+                if (!authForm.username.trim() || !authForm.password.trim()) {
+                    alert('请输入用户名和密码');
+                    return;
+                }
+                const found = players.find(p => (p.username || '').toLowerCase() === authForm.username.trim().toLowerCase());
+                if (!found || found.password !== authForm.password) {
+                    alert('用户名或密码错误');
+                    return;
+                }
+                setCurrentUser({ role: 'player', playerId: found.id, username: found.username || found.name || '' });
+                setAuthForm({ username: '', displayName: '', password: '', confirmPassword: '' });
+                alert(`欢迎回来，${found.name || found.username}!`);
+            };
+
+            const logoutUser = () => {
+                setCurrentUser({ role: 'visitor', playerId: null, username: '' });
+                setIsAdmin(false);
+                setSelectedPlayerForShop(null);
             };
 
             const deletePlayer = (playerId) => {
@@ -807,6 +893,10 @@
             };
 
             const buyItem = (playerId, itemId) => {
+                if (!isAdmin && !(currentUser.role === 'player' && currentUser.playerId === playerId)) {
+                    alert('仅管理员或登录的玩家本人可以购买道具');
+                    return;
+                }
                 if (!Array.isArray(players)) return;
                 const player = players.find(p => p && p.id === playerId);
                 if (!player) return;
@@ -870,11 +960,21 @@
                     alert('没有玩家可记录');
                     return;
                 }
+                if (!isAdmin && currentUser.role !== 'player') {
+                    alert('请先登录玩家账号或进入管理员模式后再记录分数');
+                    return;
+                }
                 // 更新每个玩家的分数和统计
                 const updatedPlayers = players.map(player => {
                     // 确保player是有效对象
                     if (!player || typeof player !== 'object') {
                         return null;
+                    }
+                    const canEditThisPlayer = isAdmin || (currentUser.role === 'player' && currentUser.playerId === player.id);
+                    if (!canEditThisPlayer) {
+                        return {
+                            ...player
+                        };
                     }
                     
                     const scoreInput = roundScores[player.id];
@@ -1097,23 +1197,110 @@
                             </div>
 
                             <div className="card">
+                                <h2>账号中心</h2>
+                                {currentUser.role === 'player' ? (
+                                    <div>
+                                        <p style={{marginBottom: '0.5rem', color: '#059669'}}>当前玩家：{players.find(p => p.id === currentUser.playerId)?.name || currentUser.username}</p>
+                                        <button className="btn btn-danger" style={{width: '100%'}} onClick={logoutUser}>退出登录</button>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <div style={{display: 'flex', gap: '0.5rem', marginBottom: '0.75rem'}}>
+                                            <button
+                                                className="btn"
+                                                style={{flex: 1, background: authMode === 'login' ? '#2563eb' : '#e5e7eb', color: authMode === 'login' ? '#fff' : '#1f2937'}}
+                                                onClick={() => setAuthMode('login')}
+                                            >
+                                                登录
+                                            </button>
+                                            <button
+                                                className="btn"
+                                                style={{flex: 1, background: authMode === 'register' ? '#2563eb' : '#e5e7eb', color: authMode === 'register' ? '#fff' : '#1f2937'}}
+                                                onClick={() => setAuthMode('register')}
+                                            >
+                                                注册
+                                            </button>
+                                        </div>
+                                        {authMode === 'login' ? (
+                                            <div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="用户名"
+                                                    value={authForm.username}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, username: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <input
+                                                    type="password"
+                                                    placeholder="密码"
+                                                    value={authForm.password}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, password: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <button className="btn btn-success" style={{width: '100%'}} onClick={loginPlayer}>登录</button>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="用户名"
+                                                    value={authForm.username}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, username: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder="显示昵称（可选）"
+                                                    value={authForm.displayName}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, displayName: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <input
+                                                    type="password"
+                                                    placeholder="密码"
+                                                    value={authForm.password}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, password: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <input
+                                                    type="password"
+                                                    placeholder="确认密码"
+                                                    value={authForm.confirmPassword}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <button className="btn btn-success" style={{width: '100%'}} onClick={registerPlayer}>注册</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="card">
                                 <h2>记录本局分数</h2>
                                 {players.length > 0 ? (
                                     <div>
-                                        {players.map(player => (
-                                            <div key={player.id} className="input-group">
-                                                <input
-                                                    type="number"
-                                                    placeholder={`${player.name} 本局分数变化 (可留空视为 0)`}
-                                                    value={roundScores[player.id] || ''}
-                                                    onChange={(e) => setRoundScores(prev => ({ ...prev, [player.id]: e.target.value }))}
-                                                    onKeyPress={(e) => e.key === 'Enter' && recordRound()}
-                                                />
-                                            </div>
-                                        ))}
+                                        {players.map(player => {
+                                            const canEditScore = isAdmin || (currentUser.role === 'player' && currentUser.playerId === player.id);
+                                            return (
+                                                <div key={player.id} className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        placeholder={`${player.name} 本局分数变化 ${canEditScore ? '(可留空视为 0)' : '(无权限)'}`}
+                                                        value={roundScores[player.id] || ''}
+                                                        onChange={(e) => {
+                                                            if (!canEditScore) return;
+                                                            setRoundScores(prev => ({ ...prev, [player.id]: e.target.value }));
+                                                        }}
+                                                        disabled={!canEditScore}
+                                                        onKeyPress={(e) => e.key === 'Enter' && canEditScore && recordRound()}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
                                         <button
                                             onClick={recordRound}
-                                            disabled={players.length === 0}
+                                            disabled={players.length === 0 || (!isAdmin && currentUser.role !== 'player')}
                                             className="btn btn-success"
                                             style={{ marginTop: '0.5rem' }}
                                         >
@@ -1140,27 +1327,39 @@
                                                     </div>
                                                     <div className="shop-item-desc">{item.description}</div>
                                                     <div className="shop-item-actions">
-                                                        <select
-                                                            className="player-select"
-                                                            value={selectedPlayerForShop || ''}
-                                                            onChange={(e) => setSelectedPlayerForShop(e.target.value ? parseInt(e.target.value, 10) : null)}
-                                                        >
-                                                            <option value="">选择玩家...</option>
-                                                            {players.map(p => (
-                                                                <option key={p.id} value={p.id}>
-                                                                    {p.name} (积分: {p.score})
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                        {currentUser.role === 'player' ? (
+                                                            <div style={{flex: 1, fontSize: '0.875rem', color: '#1f2937'}}>
+                                                                当前玩家：{players.find(p => p.id === currentUser.playerId)?.name || currentUser.username}
+                                                            </div>
+                                                        ) : (
+                                                            <select
+                                                                className="player-select"
+                                                                value={selectedPlayerForShop || ''}
+                                                                onChange={(e) => setSelectedPlayerForShop(e.target.value ? parseInt(e.target.value, 10) : null)}
+                                                                disabled={!isAdmin}
+                                                            >
+                                                                <option value="">{isAdmin ? '选择玩家...' : '访客无法购买'}</option>
+                                                                {players.map(p => (
+                                                                    <option key={p.id} value={p.id}>
+                                                                        {p.name} (积分: {p.score})
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        )}
                                                         <button
                                                             onClick={() => {
-                                                                if (selectedPlayerForShop) {
+                                                                if (currentUser.role === 'player' && currentUser.playerId) {
+                                                                    buyItem(currentUser.playerId, item.id);
+                                                                } else if (selectedPlayerForShop && isAdmin) {
                                                                     buyItem(selectedPlayerForShop, item.id);
                                                                 } else {
-                                                                    alert('请先选择玩家');
+                                                                    alert('请先以玩家身份登录，或由管理员选择玩家');
                                                                 }
                                                             }}
-                                                            disabled={!selectedPlayerForShop}
+                                                            disabled={
+                                                                (currentUser.role !== 'player' || !currentUser.playerId) &&
+                                                                (!selectedPlayerForShop || !isAdmin)
+                                                            }
                                                             className="btn btn-primary"
                                                         >
                                                             购买
@@ -1190,6 +1389,49 @@
                                             数据实时同步中...
                                         </p>
                                     )}
+                                    <div style={{border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.5rem', background: '#fefce8'}}>
+                                        <p style={{fontWeight: 'bold', marginBottom: '0.5rem', color: isAdmin ? '#16a34a' : '#b45309'}}>
+                                            当前模式：{isAdmin ? '管理员（可写入云端）' : '访客（仅查看）'}
+                                        </p>
+                                        {!isAdmin ? (
+                                            <div>
+                                                <input
+                                                    type="password"
+                                                    placeholder="输入管理员密码"
+                                                    value={passcodeInput}
+                                                    onChange={(e) => setPasscodeInput(e.target.value)}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
+                                                <button
+                                                    className="btn btn-success"
+                                                    style={{width: '100%'}}
+                                                    onClick={() => {
+                                                        if (passcodeInput === ADMIN_PASSCODE) {
+                                                            setIsAdmin(true);
+                                                            setPasscodeInput('');
+                                                            alert('已切换为管理员模式，可以写入Firebase。');
+                                                        } else {
+                                                            alert('密码错误，请联系管理员。');
+                                                        }
+                                                    }}
+                                                >
+                                                    进入管理员模式
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                className="btn btn-danger"
+                                                style={{width: '100%'}}
+                                                onClick={() => {
+                                                    if (confirm('确定要退出管理员模式吗？退出后仅可读取数据。')) {
+                                                        setIsAdmin(false);
+                                                    }
+                                                }}
+                                            >
+                                                退出管理员模式
+                                            </button>
+                                        )}
+                                    </div>
                                     
                                     {showFirebaseConfig && (
                                         <div style={{
