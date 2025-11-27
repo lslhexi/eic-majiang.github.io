@@ -540,7 +540,8 @@
             const [passcodeInput, setPasscodeInput] = useState('');
             const [currentUser, setCurrentUser] = useState({ role: 'visitor', playerId: null, username: '' });
             const [authMode, setAuthMode] = useState('login'); // login | register
-            const [authForm, setAuthForm] = useState({ username: '', displayName: '', password: '', confirmPassword: '' });
+            const [authForm, setAuthForm] = useState({ username: '', displayName: '', password: '', confirmPassword: '', adminPass: '' });
+            const [firebaseWriteEnabled, setFirebaseWriteEnabled] = useState(false);
 
             // 初始化Firebase
             const initFirebase = (config) => {
@@ -685,7 +686,7 @@
                 if (isSaving) return; // 如果正在从Firebase加载，不保存
                 if (players.length === 0 && !isFirebaseReady) return; // 初始加载时不保存空数组
 
-                const canWriteFirebase = isAdmin || currentUser.role === 'player';
+                const canWriteFirebase = firebaseWriteEnabled && (isAdmin || currentUser.role === 'player');
 
                 if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
                     // 保存到Firebase
@@ -720,7 +721,7 @@
             // 保存回合数到Firebase或localStorage
             useEffect(() => {
                 if (isSaving) return;
-                const canWriteFirebase = isAdmin || currentUser.role === 'player';
+                const canWriteFirebase = firebaseWriteEnabled && (isAdmin || currentUser.role === 'player');
                 if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
                     setIsSaving(true);
                     db.ref('roundCount').set(roundCount).then(() => {
@@ -827,6 +828,10 @@
                     alert('该用户名已被注册');
                     return;
                 }
+                if (authForm.adminPass !== ADMIN_PASSCODE) {
+                    alert('注册需要管理员密码，请联系管理员获取。');
+                    return;
+                }
                 const displayName = authForm.displayName.trim() || authForm.username.trim();
                 const newPlayer = {
                     id: Date.now(),
@@ -845,7 +850,7 @@
                     }
                 };
                 setPlayers([...players, newPlayer]);
-                setAuthForm({ username: '', displayName: '', password: '', confirmPassword: '' });
+                setAuthForm({ username: '', displayName: '', password: '', confirmPassword: '', adminPass: '' });
                 setAuthMode('login');
                 alert('注册成功，请使用账号登录');
             };
@@ -861,13 +866,15 @@
                     return;
                 }
                 setCurrentUser({ role: 'player', playerId: found.id, username: found.username || found.name || '' });
-                setAuthForm({ username: '', displayName: '', password: '', confirmPassword: '' });
+                setFirebaseWriteEnabled(true);
+                setAuthForm({ username: '', displayName: '', password: '', confirmPassword: '', adminPass: '' });
                 alert(`欢迎回来，${found.name || found.username}!`);
             };
 
             const logoutUser = () => {
                 setCurrentUser({ role: 'visitor', playerId: null, username: '' });
                 setIsAdmin(false);
+                setFirebaseWriteEnabled(false);
                 setSelectedPlayerForShop(null);
             };
 
@@ -1269,6 +1276,13 @@
                                                     onChange={(e) => setAuthForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                                                     style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
                                                 />
+                                                <input
+                                                    type="password"
+                                                    placeholder="管理员密码（必填）"
+                                                    value={authForm.adminPass}
+                                                    onChange={(e) => setAuthForm(prev => ({ ...prev, adminPass: e.target.value }))}
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', marginBottom: '0.5rem'}}
+                                                />
                                                 <button className="btn btn-success" style={{width: '100%'}} onClick={registerPlayer}>注册</button>
                                             </div>
                                         )}
@@ -1390,9 +1404,54 @@
                                         </p>
                                     )}
                                     <div style={{border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.5rem', background: '#fefce8'}}>
-                                        <p style={{fontWeight: 'bold', marginBottom: '0.5rem', color: isAdmin ? '#16a34a' : '#b45309'}}>
-                                            当前模式：{isAdmin ? '管理员（可写入云端）' : '访客（仅查看）'}
+                                        <p style={{fontWeight: 'bold', marginBottom: '0.5rem', color: (firebaseWriteEnabled && (isAdmin || currentUser.role === 'player')) ? '#16a34a' : '#b45309'}}>
+                                            写入状态：{(firebaseWriteEnabled && (isAdmin || currentUser.role === 'player')) ? '已启用云端写入' : '只读模式（不会影响云端数据）'}
                                         </p>
+                                        {isAdmin && (
+                                            <div style={{marginBottom: '0.5rem'}}>
+                                                <button
+                                                    className="btn"
+                                                    style={{width: '100%', background: firebaseWriteEnabled ? '#e5e7eb' : '#2563eb', color: firebaseWriteEnabled ? '#1f2937' : '#fff', marginBottom: '0.25rem'}}
+                                                    onClick={() => {
+                                                        if (!firebaseWriteEnabled) {
+                                                            if (confirm('确定要启用云端写入吗？启用后本地更改将覆盖云端数据。')) {
+                                                                setFirebaseWriteEnabled(true);
+                                                                alert('已启用云端写入。');
+                                                            }
+                                                        } else {
+                                                            setFirebaseWriteEnabled(false);
+                                                            alert('已关闭云端写入，当前为只读模式。');
+                                                        }
+                                                    }}
+                                                >
+                                                    {firebaseWriteEnabled ? '关闭云端写入（保持只读）' : '启用云端写入'}
+                                                </button>
+                                                {!firebaseWriteEnabled && (
+                                                    <button
+                                                        className="btn btn-success"
+                                                        style={{width: '100%'}}
+                                                        onClick={() => {
+                                                            if (!isFirebaseReady || !db) {
+                                                                alert('请先配置并连接Firebase');
+                                                                return;
+                                                            }
+                                                            if (confirm('确定要将当前本地数据覆盖到云端吗？该操作不可撤销。')) {
+                                                                setIsSaving(true);
+                                                                db.ref('players').set(players).then(() => db.ref('roundCount').set(roundCount)).then(() => {
+                                                                    alert('已将本地数据上传至云端');
+                                                                    setIsSaving(false);
+                                                                }).catch(err => {
+                                                                    alert('上传失败：' + err.message);
+                                                                    setIsSaving(false);
+                                                                });
+                                                            }
+                                                        }}
+                                                    >
+                                                        手动上传本地数据
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                         {!isAdmin ? (
                                             <div>
                                                 <input
@@ -1409,7 +1468,7 @@
                                                         if (passcodeInput === ADMIN_PASSCODE) {
                                                             setIsAdmin(true);
                                                             setPasscodeInput('');
-                                                            alert('已切换为管理员模式，可以写入Firebase。');
+                                                            alert('已切换为管理员模式，请酌情启用写入。');
                                                         } else {
                                                             alert('密码错误，请联系管理员。');
                                                         }
