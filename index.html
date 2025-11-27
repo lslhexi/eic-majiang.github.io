@@ -523,6 +523,7 @@
             const [isFirebaseReady, setIsFirebaseReady] = useState(false);
             const [useFirebase, setUseFirebase] = useState(false);
             const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
+            const [isSaving, setIsSaving] = useState(false); // 防止循环保存的标志
             const [configInput, setConfigInput] = useState({
                 apiKey: '',
                 authDomain: '',
@@ -585,6 +586,7 @@
                     const roundCountRef = db.ref('roundCount');
 
                     playersRef.on('value', (snapshot) => {
+                        if (isSaving) return; // 如果正在保存，忽略这次更新
                         const data = snapshot.val();
                         if (data) {
                             const playersArray = Array.isArray(data) ? data : Object.values(data);
@@ -595,16 +597,21 @@
                                 }
                                 return { ...p, items: items };
                             });
+                            setIsSaving(true);
                             setPlayers(playersWithItems);
+                            setTimeout(() => setIsSaving(false), 100);
                         } else {
                             setPlayers([]);
                         }
                     });
 
                     roundCountRef.on('value', (snapshot) => {
+                        if (isSaving) return;
                         const count = snapshot.val();
                         if (count !== null) {
+                            setIsSaving(true);
                             setRoundCount(count);
+                            setTimeout(() => setIsSaving(false), 100);
                         }
                     });
 
@@ -635,11 +642,20 @@
 
             // 保存玩家数据到Firebase或localStorage
             useEffect(() => {
-                if (players.length === 0) return;
+                if (isSaving) return; // 如果正在从Firebase加载，不保存
+                if (players.length === 0 && !isFirebaseReady) return; // 初始加载时不保存空数组
 
                 if (isFirebaseReady && db && useFirebase) {
                     // 保存到Firebase
-                    db.ref('players').set(players);
+                    setIsSaving(true);
+                    db.ref('players').set(players).then(() => {
+                        console.log('数据已保存到Firebase');
+                        setTimeout(() => setIsSaving(false), 500);
+                    }).catch((error) => {
+                        console.error('保存到Firebase失败:', error);
+                        alert('保存失败: ' + error.message);
+                        setIsSaving(false);
+                    });
                 } else {
                     // 保存到localStorage
                     localStorage.setItem('mahjongPlayers', JSON.stringify(players));
@@ -653,16 +669,23 @@
                     });
                     return updated;
                 });
-            }, [players, isFirebaseReady, db, useFirebase]);
+            }, [players, isFirebaseReady, db, useFirebase, isSaving]);
 
             // 保存回合数到Firebase或localStorage
             useEffect(() => {
+                if (isSaving) return;
                 if (isFirebaseReady && db && useFirebase) {
-                    db.ref('roundCount').set(roundCount);
+                    setIsSaving(true);
+                    db.ref('roundCount').set(roundCount).then(() => {
+                        setTimeout(() => setIsSaving(false), 500);
+                    }).catch((error) => {
+                        console.error('保存回合数失败:', error);
+                        setIsSaving(false);
+                    });
                 } else {
                     localStorage.setItem('mahjongRoundCount', roundCount);
                 }
-            }, [roundCount, isFirebaseReady, db, useFirebase]);
+            }, [roundCount, isFirebaseReady, db, useFirebase, isSaving]);
 
             // 段位表数据
             const rankTable = [
@@ -1118,6 +1141,11 @@
                                     >
                                         {isFirebaseReady ? '✅ Firebase已连接' : '⚙️ 配置Firebase'}
                                     </button>
+                                    {isFirebaseReady && (
+                                        <p style={{fontSize: '0.75rem', color: '#059669', marginBottom: '0.5rem', textAlign: 'center'}}>
+                                            数据实时同步中...
+                                        </p>
+                                    )}
                                     
                                     {showFirebaseConfig && (
                                         <div style={{
