@@ -881,11 +881,11 @@
                         
                         // 应用道具效果
                         let finalChange = validChange;
-                        let newItems = { ...player.items };
+                        let newItems = player.items ? { ...player.items } : { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
                         let effectMessage = '';
 
                         // 双倍积分卡效果：无论输赢，使用一次后失效
-                        if (player.items.doubleCard) {
+                        if (player.items && player.items.doubleCard) {
                             // 卡片使用后失效
                             newItems.doubleCard = false;
                             
@@ -900,7 +900,7 @@
                         }
 
                         // 掉段保护卡效果：无论输赢，使用一次后失效
-                        if (player.items.protectCard) {
+                        if (player.items && player.items.protectCard) {
                             // 卡片使用后失效
                             newItems.protectCard = false;
                             
@@ -926,7 +926,7 @@
                         }
 
                         // 掉分保护卡效果：如果输了则不扣分，无论输赢都失效
-                        if (player.items.lossProtectCard) {
+                        if (player.items && player.items.lossProtectCard) {
                             // 卡片使用后失效
                             newItems.lossProtectCard = false;
                             
@@ -941,7 +941,7 @@
                         }
 
                         // VIP使用次数处理：每次记分时减少1次，如果次数为0则失效
-                        if (player.items.vip && player.items.vip > 0) {
+                        if (player.items && player.items.vip && player.items.vip > 0) {
                             newItems.vip = player.items.vip - 1;
                             if (newItems.vip === 0) {
                                 effectMessage = effectMessage ? effectMessage + `（VIP已失效）` : `（VIP已失效）`;
@@ -951,7 +951,8 @@
                         const newScore = player.score + finalChange;
                         const newGameCount = player.gameCount + 1;
                         const newWinCount = finalChange > 0 ? player.winCount + 1 : player.winCount;
-                        const newHistory = [...player.history, {
+                        const currentHistory = Array.isArray(player.history) ? player.history : [];
+                        const newHistory = [...currentHistory, {
                             date: new Date().toLocaleString(),
                             change: finalChange,
                             originalChange: validChange,
@@ -961,9 +962,9 @@
                         
                         return {
                             ...player,
-                            score: newScore,
-                            gameCount: newGameCount,
-                            winCount: newWinCount,
+                            score: newScore || 0,
+                            gameCount: newGameCount || 0,
+                            winCount: newWinCount || 0,
                             history: newHistory,
                             items: newItems
                         };
