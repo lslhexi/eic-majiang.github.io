@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>终极四字麻将段位统计系统</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #fef2f2 0%, #fef3c7 100%);
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .title {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .title h1 {
+            font-size: 2.5rem;
+            color: #991b1b;
+            margin-bottom: 0.5rem;
+        }
+        
+        .title p {
+            color: #6b7280;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid;
+        }
+        
+        .stat-card.blue { border-left-color: #3b82f6; }
+        .stat-card.green { border-left-color: #10b981; }
+        .stat-card.purple { border-left-color: #8b5cf6; }
+        .stat-card.yellow { border-left-color: #f59e0b; }
+        
+        .stat-content {
+            display: flex;
+            align-items: center;
+        }
+        
+        .stat-icon {
+            width: 2rem;
+            height: 2rem;
+            margin-right: 0.75rem;
+        }
+        
+        .stat-text h3 {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-text p {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1f2937;
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+        }
+        
+        .card h2 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 1rem;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .input-group input, .input-group select {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            outline: none;
+        }
+        
+        .input-group input:focus, .input-group select:focus {
+            box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+            border-color: #dc2626;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+        }
+        
+        .btn-primary {
+            background: #dc2626;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #b91c1c;
+        }
+        
+        .btn-success {
+            background: #059669;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #047857;
+        }
+        
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+        
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        .player-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .player-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            transition: background-color 0.2s;
+        }
+        
+        .player-item:hover {
+            background: #f9fafb;
+        }
+
+        .player-item.vip-card {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #fcd34d 100%);
+            border: 2px solid #f59e0b;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-item.vip-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: vip-shimmer 3s infinite;
+            pointer-events: none;
+        }
+
+        .player-item.vip-card:hover {
+            background: linear-gradient(135deg, #fde68a 0%, #fcd34d 50%, #fbbf24 100%);
+            box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
+        }
+
+        @keyframes vip-shimmer {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(45deg);
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(45deg);
+            }
+        }
+        
+        .player-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .player-rank {
+            font-size: 1.125rem;
+            font-weight: bold;
+            margin-right: 0.75rem;
+        }
+        
+        .rank-1 { color: #d97706; }
+        .rank-2 { color: #6b7280; }
+        .rank-3 { color: #ea580c; }
+        .rank-other { color: #9ca3af; }
+        
+        .player-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            font-size: 0.875rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .rank-info {
+            background: #f3f4f6;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+        }
+        
+        .rank-name {
+            font-weight: bold;
+            color: #7c3aed;
+        }
+        
+        .rank-desc {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        
+        .rank-table {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .rank-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            transition: background-color 0.2s;
+        }
+        
+        .rank-item:hover {
+            background: #f9fafb;
+        }
+        
+        .rank-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+        
+        .rank-item-name {
+            font-weight: bold;
+            color: #7c3aed;
+        }
+        
+        .rank-item-range {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+        
+        .rank-item-desc {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+        }
+        
+        .empty-icon {
+            width: 3rem;
+            height: 3rem;
+            margin: 0 auto 1rem;
+            color: #d1d5db;
+        }
+
+        .shop-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: #f9fafb;
+        }
+
+        .shop-item-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .shop-item-name {
+            font-weight: bold;
+            color: #1f2937;
+            flex: 1;
+        }
+
+        .shop-item-price {
+            color: #dc2626;
+            font-weight: bold;
+        }
+
+        .shop-item-desc {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 0.75rem;
+        }
+
+        .shop-item-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .player-select {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+        }
+
+        .item-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background: #dbeafe;
+            color: #1e40af;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+
+        .vip-name {
+            background: linear-gradient(90deg, #fbbf24, #f59e0b, #d97706, #f59e0b, #fbbf24);
+            background-size: 200% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: bold;
+            animation: vip-shine 3s ease-in-out infinite;
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .vip-crown-icon {
+            display: inline-block;
+            animation: vip-crown 2s ease-in-out infinite;
+            filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.8));
+        }
+
+        @keyframes vip-shine {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        @keyframes vip-crown {
+            0%, 100% {
+                transform: scale(1) rotate(0deg);
+            }
+            25% {
+                transform: scale(1.15) rotate(-8deg);
+            }
+            75% {
+                transform: scale(1.15) rotate(8deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // 图标组件...
+        const PlusCircle = () => React.createElement('svg', { 
+            width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' 
+        }, [
+            React.createElement('circle', { key: 'circle', cx: 12, cy: 12, r: 10 }),
+            React.createElement('path', { key: 'path', d: 'M12 8v8m-4-4h8' })
+        ]);
+        
+        const Trash2 = () => React.createElement('svg', { 
+            width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' 
+        }, [
+            React.createElement('path', { key: 'path1', d: 'M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2' }),
+            React.createElement('line', { key: 'line1', x1: 10, y1: 11, x2: 10, y2: 17 }),
+            React.createElement('line', { key: 'line2', x1: 14, y1: 11, x2: 14, y2: 17 })
+        ]);
+        
+        const Trophy = (props) => React.createElement('svg', { 
+            width: props?.size || 16, height: props?.size || 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className: props?.className 
+        }, [
+            React.createElement('path', { key: 'path1', d: 'M6 9H4.5a2.5 2.5 0 0 1 0-5H6' }),
+            React.createElement('path', { key: 'path2', d: 'M18 9h1.5a2.5 2.5 0 0 0 0-5H18' }),
+            React.createElement('path', { key: 'path3', d: 'M4 22h16' }),
+            React.createElement('path', { key: 'path4', d: 'M10 14.66V17c0 .55.47.98.97 1.21C11.25 18.48 11.61 18.65 12 18.65s.75-.17 1.03-.44C13.53 17.98 14 17.55 14 17v-2.34c0-.59-.26-1.16-.68-1.56L12 12l-1.32 1.1c-.42.4-.68.97-.68 1.56Z' }),
+            React.createElement('path', { key: 'path5', d: 'M6 9a6 6 0 0 0 12 0H6Z' })
+        ]);
+        
+        const Users = () => React.createElement('svg', { 
+            width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className: 'stat-icon'
+        }, [
+            React.createElement('path', { key: 'path1', d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' }),
+            React.createElement('circle', { key: 'circle1', cx: 9, cy: 7, r: 4 }),
+            React.createElement('path', { key: 'path2', d: 'M22 21v-2a4 4 0 0 0-3-3.87' }),
+            React.createElement('path', { key: 'path3', d: 'M16 3.13a4 4 0 0 1 0 7.75' })
+        ]);
+        
+        const TrendingUp = () => React.createElement('svg', { 
+            width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className: 'stat-icon'
+        }, [
+            React.createElement('polyline', { key: 'polyline', points: '22,7 13.5,15.5 8.5,10.5 2,17' }),
+            React.createElement('polyline', { key: 'polyline2', points: '16,7 22,7 22,13' })
+        ]);
+        
+        const Award = () => React.createElement('svg', { 
+            width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', className: 'stat-icon'
+        }, [
+            React.createElement('circle', { key: 'circle', cx: 12, cy: 8, r: 6 }),
+            React.createElement('path', { key: 'path1', d: 'M15.477 12.89 17 22l-5-3-5 3 1.523-9.11' })
+        ]);
+
+        const ShoppingCart = () => React.createElement('svg', { 
+            width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' 
+        }, [
+            React.createElement('circle', { key: 'circle1', cx: 9, cy: 21, r: 1 }),
+            React.createElement('circle', { key: 'circle2', cx: 20, cy: 21, r: 1 }),
+            React.createElement('path', { key: 'path', d: 'M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6' })
+        ]);
+
+        const Shield = () => React.createElement('svg', { 
+            width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' 
+        }, [
+            React.createElement('path', { key: 'path', d: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' })
+        ]);
+
+        const Zap = () => React.createElement('svg', { 
+            width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' 
+        }, [
+            React.createElement('polygon', { key: 'polygon', points: '13 2 3 14 12 14 11 22 21 10 12 10 13 2' })
+        ]);
+
+        const Crown = () => React.createElement('svg', { 
+            width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 
+            strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' 
+        }, [
+            React.createElement('path', { key: 'path1', d: 'M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z' }),
+            React.createElement('path', { key: 'path2', d: 'M5 16h14v3H5v-3z' })
+        ]);
+
+        const MahjongScoreTracker = () => {
+            const [players, setPlayers] = useState([]);
+            const [newPlayerName, setNewPlayerName] = useState('');
+            const [roundScores, setRoundScores] = useState({});  // 存储本局每个玩家的分数变化
+            const [roundCount, setRoundCount] = useState(0);
+            const [selectedPlayerForShop, setSelectedPlayerForShop] = useState(null);  // 选择购买道具的玩家
+            const [firebaseConfig, setFirebaseConfig] = useState(null);
+            const [db, setDb] = useState(null);
+            const [isFirebaseReady, setIsFirebaseReady] = useState(false);
+            const [useFirebase, setUseFirebase] = useState(false);
+            const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
+            const [isSaving, setIsSaving] = useState(false); // 防止循环保存的标志
+            const [configInput, setConfigInput] = useState({
+                apiKey: '',
+                authDomain: '',
+                databaseURL: '',
+                projectId: '',
+                storageBucket: '',
+                messagingSenderId: '',
+                appId: ''
+            });
+
+            // 初始化Firebase
+            const initFirebase = (config) => {
+                try {
+                    if (!window.firebase) {
+                        console.error('Firebase SDK未加载');
+                        alert('Firebase SDK未加载，请刷新页面重试');
+                        return false;
+                    }
+                    // 如果已经初始化过，先删除旧实例
+                    try {
+                        window.firebase.app().delete();
+                    } catch (e) {
+                        // 忽略错误，可能没有初始化过
+                    }
+                    const app = window.firebase.initializeApp(config);
+                    const database = window.firebase.database(app);
+                    setDb(database);
+                    setFirebaseConfig(config);
+                    setIsFirebaseReady(true);
+                    setUseFirebase(true);
+                    // 保存配置到localStorage
+                    localStorage.setItem('firebaseConfig', JSON.stringify(config));
+                    return true;
+                } catch (error) {
+                    console.error('Firebase初始化失败:', error);
+                    alert('Firebase初始化失败: ' + error.message);
+                    return false;
+                }
+            };
+
+            // 从localStorage加载Firebase配置
+            useEffect(() => {
+                const savedConfig = localStorage.getItem('firebaseConfig');
+                if (savedConfig) {
+                    try {
+                        const config = JSON.parse(savedConfig);
+                        setConfigInput(config);
+                        initFirebase(config);
+                    } catch (e) {
+                        console.error('加载Firebase配置失败:', e);
+                    }
+                }
+            }, []);
+
+            // 从Firebase或localStorage加载数据
+            useEffect(() => {
+                if (isFirebaseReady && db) {
+                    // 使用Firebase实时监听
+                    const playersRef = db.ref('players');
+                    const roundCountRef = db.ref('roundCount');
+
+                    playersRef.on('value', (snapshot) => {
+                        if (isSaving) return; // 如果正在保存，忽略这次更新
+                        const data = snapshot.val();
+                        if (data) {
+                            let playersArray;
+                            if (Array.isArray(data)) {
+                                playersArray = data;
+                            } else if (typeof data === 'object' && data !== null) {
+                                playersArray = Object.values(data);
+                            } else {
+                                playersArray = [];
+                            }
+                            
+                            if (playersArray && playersArray.length > 0) {
+                                const playersWithItems = playersArray.map(p => {
+                                    if (!p || typeof p !== 'object') return null;
+                                    const items = p.items || { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
+                                    if (typeof items.vip === 'boolean') {
+                                        items.vip = items.vip ? 3 : 0;
+                                    }
+                                    return { ...p, items: items };
+                                }).filter(p => p !== null);
+                                
+                                setIsSaving(true);
+                                setPlayers(playersWithItems);
+                                setTimeout(() => setIsSaving(false), 100);
+                            } else {
+                                setPlayers([]);
+                            }
+                        } else {
+                            setPlayers([]);
+                        }
+                    });
+
+                    roundCountRef.on('value', (snapshot) => {
+                        if (isSaving) return;
+                        const count = snapshot.val();
+                        if (count !== null) {
+                            setIsSaving(true);
+                            setRoundCount(count);
+                            setTimeout(() => setIsSaving(false), 100);
+                        }
+                    });
+
+                    return () => {
+                        playersRef.off();
+                        roundCountRef.off();
+                    };
+                } else {
+                    // 使用localStorage（兼容模式）
+                    const savedPlayers = localStorage.getItem('mahjongPlayers');
+                    if (savedPlayers) {
+                        const parsed = JSON.parse(savedPlayers);
+                        const playersWithItems = parsed.map(p => {
+                            const items = p.items || { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
+                            if (typeof items.vip === 'boolean') {
+                                items.vip = items.vip ? 3 : 0;
+                            }
+                            return { ...p, items: items };
+                        });
+                        setPlayers(playersWithItems);
+                    }
+                    const savedRoundCount = localStorage.getItem('mahjongRoundCount');
+                    if (savedRoundCount) {
+                        setRoundCount(parseInt(savedRoundCount, 10));
+                    }
+                }
+            }, [isFirebaseReady, db]);
+
+            // 保存玩家数据到Firebase或localStorage
+            useEffect(() => {
+                if (isSaving) return; // 如果正在从Firebase加载，不保存
+                if (players.length === 0 && !isFirebaseReady) return; // 初始加载时不保存空数组
+
+                if (isFirebaseReady && db && useFirebase) {
+                    // 保存到Firebase
+                    setIsSaving(true);
+                    db.ref('players').set(players).then(() => {
+                        console.log('数据已保存到Firebase');
+                        setTimeout(() => setIsSaving(false), 500);
+                    }).catch((error) => {
+                        console.error('保存到Firebase失败:', error);
+                        alert('保存失败: ' + error.message);
+                        setIsSaving(false);
+                    });
+                } else {
+                    // 保存到localStorage
+                    localStorage.setItem('mahjongPlayers', JSON.stringify(players));
+                }
+
+                // 同步roundScores: 确保新添加的玩家有输入框
+                setRoundScores(prev => {
+                    const updated = {};
+                    if (Array.isArray(players)) {
+                        players.forEach(p => {
+                            if (p && p.id) {
+                                updated[p.id] = prev[p.id] !== undefined ? prev[p.id] : '';
+                            }
+                        });
+                    }
+                    return updated;
+                });
+            }, [players, isFirebaseReady, db, useFirebase, isSaving]);
+
+            // 保存回合数到Firebase或localStorage
+            useEffect(() => {
+                if (isSaving) return;
+                if (isFirebaseReady && db && useFirebase) {
+                    setIsSaving(true);
+                    db.ref('roundCount').set(roundCount).then(() => {
+                        setTimeout(() => setIsSaving(false), 500);
+                    }).catch((error) => {
+                        console.error('保存回合数失败:', error);
+                        setIsSaving(false);
+                    });
+                } else {
+                    localStorage.setItem('mahjongRoundCount', roundCount);
+                }
+            }, [roundCount, isFirebaseReady, db, useFirebase, isSaving]);
+
+            // 段位表数据
+            const rankTable = [
+                { min: -2000, max: -1601, name: '破产跑路', description: '红温警告，麻将血亏，建议下善体息' },
+                { min: -1600, max: -1201, name: '吃土青铜', description: '输到怀疑人生，运气与技术双重打击' },
+                { min: -1200, max: -801, name: '霉运连连', description: '连点三胡，胡一手都嫌麻烦' },
+                { min: -800, max: -401, name: '刮风下雨', description: '放炮不停，风声雨声麻将声声催命' },
+                { min: -400, max: -1, name: '翻身在望', description: '输多赢少，但总感觉胡转乾坤' },
+                { min: 0, max: 399, name: '平平无奇', description: '水平中规中矩，社恐型打牌日常' },
+                { min: 400, max: 799, name: '稳扎稳打', description: '稳健运营，开始起场，理到点感觉' },
+                { min: 800, max: 1199, name: '大杀四方', description: '胡牌如喝水，对家叫苦不迭' },
+                { min: 1200, max: 1599, name: '雀坛霸主', description: '胜率压制，靠实力封神' },
+                { min: 1600, max: 2000, name: '天胡王者', description: '一打三无压力，打谁谁头' }
+            ];
+
+            // 商城道具数据
+            const shopItems = [
+                {
+                    id: 'doubleCard',
+                    name: '双倍积分卡',
+                    description: '下次记分时，如果赢钱，积分双倍；如果输钱，卡片失效',
+                    price: 150,
+                    icon: Zap
+                },
+                {
+                    id: 'protectCard',
+                    name: '掉段保护卡',
+                    description: '下次记分时如果输了且会掉段，则积分刚好扣除到段位边缘；如果赢钱，卡片失效',
+                    price: 100,
+                    icon: Shield
+                },
+                {
+                    id: 'lossProtectCard',
+                    name: '掉分保护卡',
+                    description: '下次记分时，如果输了则不扣分；无论输赢，使用后失效',
+                    price: 150,
+                    icon: Shield
+                },
+                {
+                    id: 'vip',
+                    name: 'VIP会员',
+                    description: '记分三次后失效，名字在积分榜上显示特效',
+                    price: 200,
+                    icon: Crown
+                }
+            ];
+
+            const getRankInfo = (score) => {
+                for (let rank of rankTable) {
+                    if (score >= rank.min && score <= rank.max) {
+                        return rank;
+                    }
+                }
+                if (score < -2000) return { ...rankTable[0], name: '破产跑路', description: '已经超出破产线' };
+                if (score > 2000) return { ...rankTable[rankTable.length - 1], name: '天胡王者', description: '已达传说境界' };
+                return rankTable[5];
+            };
+
+            const addPlayer = () => {
+                if (newPlayerName.trim() && !players.find(p => p.name === newPlayerName.trim())) {
+                    const newPlayer = {
+                        id: Date.now(),
+                        name: newPlayerName.trim(),
+                        score: 0,
+                        gameCount: 0,
+                        winCount: 0,
+                        history: [],
+                        items: {
+                            doubleCard: false,  // 双倍积分卡
+                            protectCard: false,  // 掉段保护卡
+                            lossProtectCard: false,  // 掉分保护卡
+                            vip: 0  // VIP会员（使用次数，0表示没有）
+                        }
+                    };
+                    setPlayers([...players, newPlayer]);
+                    setNewPlayerName('');
+                }
+            };
+
+            const deletePlayer = (playerId) => {
+                setPlayers(players.filter(p => p.id !== playerId));
+                setRoundScores(prev => {
+                    const updated = { ...prev };
+                    delete updated[playerId];
+                    return updated;
+                });
+            };
+
+            // 获取段位边界值（当前段位的最小值）
+            const getCurrentRankMin = (score) => {
+                for (let rank of rankTable) {
+                    if (score >= rank.min && score <= rank.max) {
+                        return rank.min;
+                    }
+                }
+                if (score < -2000) return -2000;
+                if (score > 2000) return 2000;
+                return 0;
+            };
+
+            const buyItem = (playerId, itemId) => {
+                if (!Array.isArray(players)) return;
+                const player = players.find(p => p && p.id === playerId);
+                if (!player) return;
+
+                const item = shopItems.find(i => i.id === itemId);
+                if (!item) return;
+
+                // VIP可以重复购买，增加使用次数
+                if (itemId === 'vip') {
+                    // VIP购买时增加3次使用次数（允许负积分购买）
+                    setPlayers(players.map(p => {
+                        if (p.id === playerId) {
+                            const currentVip = p.items.vip || 0;
+                            return {
+                                ...p,
+                                score: p.score - item.price,
+                                items: {
+                                    ...p.items,
+                                    vip: currentVip + 3
+                                }
+                            };
+                        }
+                        return p;
+                    }));
+                    setSelectedPlayerForShop(null);
+                    alert(`${player.name} 成功购买 ${item.name}！剩余积分：${player.score - item.price}，VIP剩余次数：${(player.items.vip || 0) + 3}`);
+                    return;
+                }
+
+                // 其他道具检查是否已有
+                if (player.items[itemId]) {
+                    alert('您已经拥有该道具！');
+                    return;
+                }
+
+                // 允许负积分购买，直接扣除积分
+
+                // 购买道具：扣除积分，添加道具
+                setPlayers(players.map(p => {
+                    if (p.id === playerId) {
+                        return {
+                            ...p,
+                            score: p.score - item.price,
+                            items: {
+                                ...p.items,
+                                [itemId]: true
+                            }
+                        };
+                    }
+                    return p;
+                }));
+                
+                // 购买成功后清空选择
+                setSelectedPlayerForShop(null);
+                alert(`${player.name} 成功购买 ${item.name}！剩余积分：${player.score - item.price}`);
+            };
+
+            const recordRound = () => {
+                // 确保至少有一个玩家存在
+                if (!Array.isArray(players) || players.length === 0) {
+                    alert('没有玩家可记录');
+                    return;
+                }
+                // 更新每个玩家的分数和统计
+                const updatedPlayers = players.map(player => {
+                    // 确保player是有效对象
+                    if (!player || typeof player !== 'object') {
+                        return null;
+                    }
+                    
+                    const scoreInput = roundScores[player.id];
+                    // 如果输入框为空或未定义，认为该玩家未参加本次游戏
+                    const participated = scoreInput !== undefined && scoreInput !== null && scoreInput !== '';
+                    
+                    if (participated) {
+                        // 参加了：更新分数、局数、胜场
+                        let change = parseInt(scoreInput, 10);
+                        const validChange = isNaN(change) ? 0 : change;
+                        
+                        // 应用道具效果
+                        let finalChange = validChange;
+                        let newItems = (player.items && typeof player.items === 'object' && !Array.isArray(player.items)) 
+                            ? { ...player.items } 
+                            : { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 };
+                        let effectMessage = '';
+
+                        // 双倍积分卡效果：无论输赢，使用一次后失效
+                        if (player.items && player.items.doubleCard) {
+                            // 卡片使用后失效
+                            newItems.doubleCard = false;
+                            
+                            if (validChange > 0) {
+                                // 赢钱：积分双倍
+                                finalChange = validChange * 2;
+                                effectMessage = `（双倍积分卡生效：${validChange} × 2 = ${finalChange}）`;
+                            } else {
+                                // 输钱或平局：卡片失效（不生效）
+                                effectMessage = effectMessage ? effectMessage + `（双倍积分卡失效）` : `（双倍积分卡失效）`;
+                            }
+                        }
+
+                        // 掉段保护卡效果：无论输赢，使用一次后失效
+                        if (player.items && player.items.protectCard) {
+                            // 卡片使用后失效
+                            newItems.protectCard = false;
+                            
+                            if (validChange < 0) {
+                                // 输钱时检查是否会掉段
+                                const currentScore = player.score;
+                                const newScore = currentScore + validChange;
+                                const currentRankMin = getCurrentRankMin(currentScore);
+                                
+                                // 如果会掉段（新分数低于当前段位的最小值）
+                                if (newScore < currentRankMin) {
+                                    // 将分数调整到当前段位边缘
+                                    finalChange = currentRankMin - currentScore;
+                                    effectMessage = effectMessage ? effectMessage + `（掉段保护卡生效：分数保护在 ${currentRankMin}）` : `（掉段保护卡生效：分数保护在 ${currentRankMin}）`;
+                                } else {
+                                    // 不会掉段，卡片失效（不生效）
+                                    effectMessage = effectMessage ? effectMessage + `（掉段保护卡失效）` : `（掉段保护卡失效）`;
+                                }
+                            } else {
+                                // 赢钱或平局：卡片失效（不生效）
+                                effectMessage = effectMessage ? effectMessage + `（掉段保护卡失效）` : `（掉段保护卡失效）`;
+                            }
+                        }
+
+                        // 掉分保护卡效果：如果输了则不扣分，无论输赢都失效
+                        if (player.items && player.items.lossProtectCard) {
+                            // 卡片使用后失效
+                            newItems.lossProtectCard = false;
+                            
+                            if (validChange < 0) {
+                                // 输钱：不扣分
+                                finalChange = 0;
+                                effectMessage = effectMessage ? effectMessage + `（掉分保护卡生效：本次不扣分）` : `（掉分保护卡生效：本次不扣分）`;
+                            } else {
+                                // 赢钱或平局：卡片失效（不生效）
+                                effectMessage = effectMessage ? effectMessage + `（掉分保护卡失效）` : `（掉分保护卡失效）`;
+                            }
+                        }
+
+                        // VIP使用次数处理：每次记分时减少1次，如果次数为0则失效
+                        if (player.items && player.items.vip && player.items.vip > 0) {
+                            newItems.vip = player.items.vip - 1;
+                            if (newItems.vip === 0) {
+                                effectMessage = effectMessage ? effectMessage + `（VIP已失效）` : `（VIP已失效）`;
+                            }
+                        }
+
+                        const newScore = player.score + finalChange;
+                        const newGameCount = player.gameCount + 1;
+                        const newWinCount = finalChange > 0 ? player.winCount + 1 : player.winCount;
+                        const currentHistory = Array.isArray(player.history) ? player.history : [];
+                        const newHistory = [...currentHistory, {
+                            date: new Date().toLocaleString(),
+                            change: finalChange,
+                            originalChange: validChange,
+                            newScore: newScore,
+                            effect: effectMessage
+                        }];
+                        
+                        return {
+                            ...player,
+                            score: newScore || 0,
+                            gameCount: newGameCount || 0,
+                            winCount: newWinCount || 0,
+                            history: newHistory,
+                            items: newItems
+                        };
+                    } else {
+                        // 未参加：不更新局数和胜场，VIP次数也不减少，只保留原有数据
+                        // 确保返回有效的对象
+                        return {
+                            id: player.id,
+                            name: player.name || '',
+                            score: player.score || 0,
+                            gameCount: player.gameCount || 0,
+                            winCount: player.winCount || 0,
+                            history: Array.isArray(player.history) ? player.history : [],
+                            items: (player.items && typeof player.items === 'object' && !Array.isArray(player.items)) 
+                                ? { ...player.items } 
+                                : { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 }
+                        };
+                    }
+                }).filter(p => p !== null && p !== undefined); // 过滤掉null和undefined值
+                setPlayers(updatedPlayers);
+                // 清空本局输入
+                setRoundScores(prev => {
+                    const cleared = {};
+                    if (Array.isArray(players)) {
+                        players.forEach(p => {
+                            if (p && p.id) {
+                                cleared[p.id] = '';
+                            }
+                        });
+                    }
+                    return cleared;
+                });
+                // 回合数加一
+                setRoundCount(prev => prev + 1);
+            };
+
+            const resetAllData = () => {
+                if (window.confirm('确定要重置所有积分数据吗？玩家列表和道具将保留，此操作无法撤销！')) {
+                    // 只重置积分相关数据，明确保留玩家列表和道具
+                    setPlayers(players.map(p => ({
+                        ...p,
+                        score: 0,
+                        gameCount: 0,
+                        winCount: 0,
+                        history: [],
+                        items: p.items || { doubleCard: false, protectCard: false, lossProtectCard: false, vip: 0 }  // 明确保留道具
+                    })));
+                    setRoundScores({});
+                    setRoundCount(0);
+                }
+            };
+
+            const sortedPlayers = (Array.isArray(players) ? [...players] : []).sort((a, b) => b.score - a.score);
+            const totalPlayers = Array.isArray(players) ? players.length : 0;
+            const totalGames = roundCount;  // 以回合数表示总局数
+            const averageScore = totalPlayers > 0 && Array.isArray(players) ? (players.reduce((sum, player) => sum + (player?.score || 0), 0) / totalPlayers).toFixed(1) : 0;
+
+            return (
+                <div className="container">
+                    <div className="title">
+                        <h1>🀄 终极四字麻将段位统计系统</h1>
+                        <p>记录每局得失，见证段位升降</p>
+                    </div>
+
+                    <div className="stats-grid">
+                        <div className="stat-card blue">
+                            <div className="stat-content">
+                                <Users className="stat-icon" />
+                                <div className="stat-text">
+                                    <h3>总玩家数</h3>
+                                    <p>{totalPlayers}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="stat-card green">
+                            <div className="stat-content">
+                                <TrendingUp className="stat-icon" />
+                                <div className="stat-text">
+                                    <h3>总局数</h3>
+                                    <p>{totalGames}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="stat-card purple">
+                            <div className="stat-content">
+                                <Award className="stat-icon" />
+                                <div className="stat-text">
+                                    <h3>平均分数</h3>
+                                    <p>{averageScore}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="stat-card yellow">
+                            <div className="stat-content">
+                                <Trophy className="stat-icon" />
+                                <div className="stat-text">
+                                    <h3>当前榜首</h3>
+                                    <p>{sortedPlayers[0]?.name || '暂无'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="main-grid">
+                        <div>
+                            <div className="card">
+                                <h2>添加新玩家</h2>
+                                <div className="input-group">
+                                    <input
+                                        type="text"
+                                        placeholder="输入玩家姓名"
+                                        value={newPlayerName}
+                                        onChange={(e) => setNewPlayerName(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && addPlayer()}
+                                    />
+                                    <button onClick={addPlayer} className="btn btn-primary">
+                                        <PlusCircle />
+                                        添加
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="card">
+                                <h2>记录本局分数</h2>
+                                {players.length > 0 ? (
+                                    <div>
+                                        {players.map(player => (
+                                            <div key={player.id} className="input-group">
+                                                <input
+                                                    type="number"
+                                                    placeholder={`${player.name} 本局分数变化 (可留空视为 0)`}
+                                                    value={roundScores[player.id] || ''}
+                                                    onChange={(e) => setRoundScores(prev => ({ ...prev, [player.id]: e.target.value }))}
+                                                    onKeyPress={(e) => e.key === 'Enter' && recordRound()}
+                                                />
+                                            </div>
+                                        ))}
+                                        <button
+                                            onClick={recordRound}
+                                            disabled={players.length === 0}
+                                            className="btn btn-success"
+                                            style={{ marginTop: '0.5rem' }}
+                                        >
+                                            记录本局
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <p style={{ color: '#6b7280' }}>请先添加玩家</p>
+                                )}
+                            </div>
+
+                            <div className="card">
+                                <h2>🛒 积分商城</h2>
+                                {players.length > 0 ? (
+                                    <div>
+                                        {shopItems.map(item => {
+                                            const IconComponent = item.icon;
+                                            return (
+                                                <div key={item.id} className="shop-item">
+                                                    <div className="shop-item-header">
+                                                        <IconComponent />
+                                                        <span className="shop-item-name">{item.name}</span>
+                                                        <span className="shop-item-price">{item.price} 积分</span>
+                                                    </div>
+                                                    <div className="shop-item-desc">{item.description}</div>
+                                                    <div className="shop-item-actions">
+                                                        <select
+                                                            className="player-select"
+                                                            value={selectedPlayerForShop || ''}
+                                                            onChange={(e) => setSelectedPlayerForShop(e.target.value ? parseInt(e.target.value, 10) : null)}
+                                                        >
+                                                            <option value="">选择玩家...</option>
+                                                            {players.map(p => (
+                                                                <option key={p.id} value={p.id}>
+                                                                    {p.name} (积分: {p.score})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (selectedPlayerForShop) {
+                                                                    buyItem(selectedPlayerForShop, item.id);
+                                                                } else {
+                                                                    alert('请先选择玩家');
+                                                                }
+                                                            }}
+                                                            disabled={!selectedPlayerForShop}
+                                                            className="btn btn-primary"
+                                                        >
+                                                            购买
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p style={{ color: '#6b7280' }}>请先添加玩家</p>
+                                )}
+                            </div>
+
+                            <div className="card">
+                                <h2>系统操作</h2>
+                                <div style={{marginBottom: '1rem'}}>
+                                    <button 
+                                        onClick={() => setShowFirebaseConfig(!showFirebaseConfig)}
+                                        className="btn btn-primary"
+                                        style={{width: '100%', marginBottom: '0.5rem'}}
+                                    >
+                                        {isFirebaseReady ? '✅ Firebase已连接' : '⚙️ 配置Firebase'}
+                                    </button>
+                                    {isFirebaseReady && (
+                                        <p style={{fontSize: '0.75rem', color: '#059669', marginBottom: '0.5rem', textAlign: 'center'}}>
+                                            数据实时同步中...
+                                        </p>
+                                    )}
+                                    
+                                    {showFirebaseConfig && (
+                                        <div style={{
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: '0.5rem',
+                                            padding: '1rem',
+                                            marginBottom: '0.5rem',
+                                            background: '#f9fafb'
+                                        }}>
+                                            <h3 style={{fontSize: '1rem', marginBottom: '0.75rem'}}>Firebase配置</h3>
+                                            <div style={{marginBottom: '0.5rem'}}>
+                                                <label style={{display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem', color: '#6b7280'}}>
+                                                    API Key <span style={{color: '#dc2626'}}>*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={configInput.apiKey}
+                                                    onChange={(e) => setConfigInput({...configInput, apiKey: e.target.value})}
+                                                    placeholder="AIza..."
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}
+                                                />
+                                            </div>
+                                            <div style={{marginBottom: '0.5rem'}}>
+                                                <label style={{display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem', color: '#6b7280'}}>
+                                                    Database URL <span style={{color: '#dc2626'}}>*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={configInput.databaseURL}
+                                                    onChange={(e) => setConfigInput({...configInput, databaseURL: e.target.value})}
+                                                    placeholder="https://xxx.firebaseio.com"
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}
+                                                />
+                                            </div>
+                                            <div style={{marginBottom: '0.5rem'}}>
+                                                <label style={{display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem', color: '#6b7280'}}>Project ID</label>
+                                                <input
+                                                    type="text"
+                                                    value={configInput.projectId}
+                                                    onChange={(e) => setConfigInput({...configInput, projectId: e.target.value})}
+                                                    placeholder="可选"
+                                                    style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}
+                                                />
+                                            </div>
+                                            <div style={{display: 'flex', gap: '0.5rem'}}>
+                                                <button
+                                                    onClick={() => {
+                                                        if (!configInput.apiKey || !configInput.databaseURL) {
+                                                            alert('请至少填写API Key和Database URL');
+                                                            return;
+                                                        }
+                                                        const config = {
+                                                            apiKey: configInput.apiKey,
+                                                            authDomain: configInput.authDomain,
+                                                            databaseURL: configInput.databaseURL,
+                                                            projectId: configInput.projectId,
+                                                            storageBucket: configInput.storageBucket,
+                                                            messagingSenderId: configInput.messagingSenderId,
+                                                            appId: configInput.appId
+                                                        };
+                                                        if (initFirebase(config)) {
+                                                            alert('Firebase配置成功！数据将实时同步。');
+                                                            setShowFirebaseConfig(false);
+                                                        }
+                                                    }}
+                                                    className="btn btn-success"
+                                                    style={{flex: 1}}
+                                                >
+                                                    保存配置
+                                                </button>
+                                                <button
+                                                    onClick={() => setShowFirebaseConfig(false)}
+                                                    className="btn"
+                                                    style={{flex: 1, background: '#e5e7eb', color: '#1f2937'}}
+                                                >
+                                                    取消
+                                                </button>
+                                            </div>
+                                            {isFirebaseReady && (
+                                                <button
+                                                    onClick={() => {
+                                                        if (confirm('确定要断开Firebase连接吗？将切换回本地存储模式。')) {
+                                                            localStorage.removeItem('firebaseConfig');
+                                                            setFirebaseConfig(null);
+                                                            setDb(null);
+                                                            setIsFirebaseReady(false);
+                                                            setUseFirebase(false);
+                                                            setShowFirebaseConfig(false);
+                                                            window.location.reload();
+                                                        }
+                                                    }}
+                                                    className="btn btn-danger"
+                                                    style={{width: '100%', marginTop: '0.5rem'}}
+                                                >
+                                                    断开Firebase连接
+                                                </button>
+                                            )}
+                                            <p style={{fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem'}}>
+                                                提示：在Firebase控制台创建Realtime Database后，复制配置信息到这里。
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                                <button onClick={resetAllData} className="btn btn-danger" style={{width: '100%'}}>
+                                    <Trash2 />
+                                    重置积分数据
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="card">
+                            <h2>玩家排行榜</h2>
+                            <div className="player-list">
+                                {sortedPlayers.map((player, index) => {
+                                    const rankInfo = getRankInfo(player.score);
+                                    const winRate = player.gameCount > 0 ? ((player.winCount / player.gameCount) * 100).toFixed(1) : 0;
+                                    
+                                    const isVip = player.items?.vip && player.items.vip > 0;
+                                    return (
+                                        <div key={player.id} className={`player-item ${isVip ? 'vip-card' : ''}`}>
+                                            <div className="player-header">
+                                                <div style={{display: 'flex', alignItems: 'center'}}>
+                                                    <span className={`player-rank ${index === 0 ? 'rank-1' : index === 1 ? 'rank-2' : index === 2 ? 'rank-3' : 'rank-other'}`}>
+                                                        #{index + 1}
+                                                    </span>
+                                                    {(player.items?.vip && player.items.vip > 0) ? (
+                                                        <span className="vip-name" style={{fontWeight: 600}}>
+                                                            <span className="vip-crown-icon">👑</span>
+                                                            {player.name}
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{fontWeight: 600, color: '#1f2937'}}>{player.name}</span>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => deletePlayer(player.id)}
+                                                    style={{background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer'}}
+                                                >
+                                                    <Trash2 />
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="player-stats">
+                                                <div>
+                                                    <p style={{color: '#6b7280'}}>分数: <span style={{fontWeight: 'bold', color: player.score >= 0 ? '#059669' : '#dc2626'}}>{player.score}</span></p>
+                                                    <p style={{color: '#6b7280'}}>胜率: <span style={{fontWeight: 'bold', color: '#2563eb'}}>{winRate}%</span></p>
+                                                </div>
+                                                <div>
+                                                    <p style={{color: '#6b7280'}}>局数: <span style={{fontWeight: 'bold'}}>{player.gameCount}</span></p>
+                                                    <p style={{color: '#6b7280'}}>胜场: <span style={{fontWeight: 'bold', color: '#059669'}}>{player.winCount}</span></p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="rank-info">
+                                                <p className="rank-name">{rankInfo.name}</p>
+                                                <p className="rank-desc">{rankInfo.description}</p>
+                                            </div>
+                                            
+                                            {(player.items?.doubleCard || player.items?.protectCard || player.items?.lossProtectCard || (player.items?.vip && player.items.vip > 0)) && (
+                                                <div style={{marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+                                                    {player.items.doubleCard && (
+                                                        <span className="item-badge" style={{display: 'flex', alignItems: 'center', gap: '0.25rem'}}>
+                                                            {React.createElement(Zap, { width: 12, height: 12 })}
+                                                            双倍积分卡
+                                                        </span>
+                                                    )}
+                                                    {player.items.protectCard && (
+                                                        <span className="item-badge" style={{display: 'flex', alignItems: 'center', gap: '0.25rem'}}>
+                                                            {React.createElement(Shield, { width: 12, height: 12 })}
+                                                            掉段保护卡
+                                                        </span>
+                                                    )}
+                                                    {player.items.lossProtectCard && (
+                                                        <span className="item-badge" style={{display: 'flex', alignItems: 'center', gap: '0.25rem'}}>
+                                                            {React.createElement(Shield, { width: 12, height: 12 })}
+                                                            掉分保护卡
+                                                        </span>
+                                                    )}
+                                                    {player.items.vip && player.items.vip > 0 && (
+                                                        <span className="item-badge" style={{display: 'flex', alignItems: 'center', gap: '0.25rem', background: '#fef3c7', color: '#d97706'}}>
+                                                            {React.createElement(Crown, { width: 12, height: 12 })}
+                                                            VIP ({player.items.vip}次)
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                
+                                {players.length === 0 && (
+                                    <div className="empty-state">
+                                        <Trophy size={48} className="empty-icon" />
+                                        <p>还没有玩家数据</p>
+                                        <p style={{fontSize: '0.875rem'}}>添加玩家开始记录吧！</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <h2>段位表参考</h2>
+                        <div className="rank-table">
+                            {rankTable.map((rank, index) => (
+                                <div key={index} className="rank-item">
+                                    <div className="rank-item-header">
+                                        <span className="rank-item-name">{rank.name}</span>
+                                        <span className="rank-item-range">{rank.min} ~ {rank.max}</span>
+                                    </div>
+                                    <p className="rank-item-desc">{rank.description}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<MahjongScoreTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
