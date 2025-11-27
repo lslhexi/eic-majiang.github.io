@@ -179,7 +179,7 @@
         }
         
         .player-list {
-            max-height: 400px;
+            max-height: 70vh;
             overflow-y: auto;
         }
         
@@ -695,8 +695,8 @@
                     if (playerSaveTimerRef.current) {
                         clearTimeout(playerSaveTimerRef.current);
                     }
+                    setIsSaving(true);
                     playerSaveTimerRef.current = setTimeout(() => {
-                        setIsSaving(true);
                         db.ref('players').set(players).then(() => {
                             console.log('数据已保存到Firebase');
                             setTimeout(() => setIsSaving(false), 500);
@@ -733,8 +733,8 @@
                     if (roundSaveTimerRef.current) {
                         clearTimeout(roundSaveTimerRef.current);
                     }
+                    setIsSaving(true);
                     roundSaveTimerRef.current = setTimeout(() => {
-                        setIsSaving(true);
                         db.ref('roundCount').set(roundCount).then(() => {
                             setTimeout(() => setIsSaving(false), 500);
                         }).catch((error) => {
