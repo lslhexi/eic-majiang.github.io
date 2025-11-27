@@ -424,7 +424,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
         
         // 图标组件...
         const PlusCircle = () => React.createElement('svg', { 
@@ -542,6 +542,9 @@
             const [authMode, setAuthMode] = useState('login'); // login | register
             const [authForm, setAuthForm] = useState({ username: '', displayName: '', password: '', confirmPassword: '', adminPass: '' });
             const [firebaseWriteEnabled, setFirebaseWriteEnabled] = useState(false);
+            const playerSaveTimerRef = useRef(null);
+            const roundSaveTimerRef = useRef(null);
+            const SAVE_DELAY_MS = 3000;
 
             // 初始化Firebase
             const initFirebase = (config) => {
@@ -689,16 +692,20 @@
                 const canWriteFirebase = firebaseWriteEnabled && (isAdmin || currentUser.role === 'player');
 
                 if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
-                    // 保存到Firebase
-                    setIsSaving(true);
-                    db.ref('players').set(players).then(() => {
-                        console.log('数据已保存到Firebase');
-                        setTimeout(() => setIsSaving(false), 500);
-                    }).catch((error) => {
-                        console.error('保存到Firebase失败:', error);
-                        alert('保存失败: ' + error.message);
-                        setIsSaving(false);
-                    });
+                    if (playerSaveTimerRef.current) {
+                        clearTimeout(playerSaveTimerRef.current);
+                    }
+                    playerSaveTimerRef.current = setTimeout(() => {
+                        setIsSaving(true);
+                        db.ref('players').set(players).then(() => {
+                            console.log('数据已保存到Firebase');
+                            setTimeout(() => setIsSaving(false), 500);
+                        }).catch((error) => {
+                            console.error('保存到Firebase失败:', error);
+                            alert('保存失败: ' + error.message);
+                            setIsSaving(false);
+                        });
+                    }, SAVE_DELAY_MS);
                 } else {
                     // 保存到localStorage
                     localStorage.setItem('mahjongPlayers', JSON.stringify(players));
@@ -723,13 +730,18 @@
                 if (isSaving) return;
                 const canWriteFirebase = firebaseWriteEnabled && (isAdmin || currentUser.role === 'player');
                 if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
-                    setIsSaving(true);
-                    db.ref('roundCount').set(roundCount).then(() => {
-                        setTimeout(() => setIsSaving(false), 500);
-                    }).catch((error) => {
-                        console.error('保存回合数失败:', error);
-                        setIsSaving(false);
-                    });
+                    if (roundSaveTimerRef.current) {
+                        clearTimeout(roundSaveTimerRef.current);
+                    }
+                    roundSaveTimerRef.current = setTimeout(() => {
+                        setIsSaving(true);
+                        db.ref('roundCount').set(roundCount).then(() => {
+                            setTimeout(() => setIsSaving(false), 500);
+                        }).catch((error) => {
+                            console.error('保存回合数失败:', error);
+                            setIsSaving(false);
+                        });
+                    }, SAVE_DELAY_MS);
                 } else {
                     localStorage.setItem('mahjongRoundCount', roundCount);
                 }
