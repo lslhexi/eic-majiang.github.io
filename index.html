@@ -547,6 +547,8 @@
             const roundSaveTimerRef = useRef(null);
             const betsSaveTimerRef = useRef(null);
             const SAVE_DELAY_MS = 3000;
+            const MIN_PAYOUT_MULTIPLIER = 0.5; // 胜率100%时
+            const MAX_PAYOUT_MULTIPLIER = 1.5; // 胜率0%时
 
             // 初始化Firebase
             const initFirebase = (config) => {
@@ -845,6 +847,11 @@
                 return rankTable[5];
             };
 
+            const calculateWinRate = (player) => {
+                if (!player || player.gameCount === 0) return 0;
+                return player.winCount / player.gameCount;
+            };
+
             const addPlayer = () => {
                 if (newPlayerName.trim() && !players.find(p => p.name === newPlayerName.trim())) {
                     const newPlayer = {
@@ -1019,6 +1026,10 @@
                     alert('请先登录玩家账号再下注');
                     return;
                 }
+                if (bets.some(b => b.bettorId === currentUser.playerId && b.status === 'pending')) {
+                    alert('每位玩家最多只能有一个待结算的下注，请等待当前下注结算后再操作。');
+                    return;
+                }
                 if (!betForm.targetPlayerId) {
                     alert('请选择要下注的玩家');
                     return;
@@ -1028,13 +1039,14 @@
                     alert('请输入有效的下注积分');
                     return;
                 }
-                if (amount > 10000) {
-                    alert('单次下注最多 10000 积分');
-                    return;
-                }
                 const bettorIndex = players.findIndex(p => p.id === currentUser.playerId);
                 if (bettorIndex === -1) {
                     alert('未找到当前玩家，请刷新后重试');
+                    return;
+                }
+                const bettor = players[bettorIndex];
+                if ((bettor.score < 0) && amount > 300) {
+                    alert('当前积分为负，单次下注最多 300 积分');
                     return;
                 }
                 const targetId = parseInt(betForm.targetPlayerId, 10);
@@ -1043,6 +1055,10 @@
                     alert('未找到目标玩家');
                     return;
                 }
+                const targetWinRate = calculateWinRate(targetPlayer);
+                const payoutMultiplier = (
+                    MAX_PAYOUT_MULTIPLIER - (MAX_PAYOUT_MULTIPLIER - MIN_PAYOUT_MULTIPLIER) * targetWinRate
+                ).toFixed(2);
                 // 扣除下注积分
                 const updatedPlayers = players.map(p => {
                     if (p.id === currentUser.playerId) {
@@ -1072,7 +1088,8 @@
                     prediction: betForm.prediction,
                     amount,
                     status: 'pending',
-                    createdAt: timestamp
+                    createdAt: timestamp,
+                    payoutMultiplier: parseFloat(payoutMultiplier)
                 };
                 setBets([...bets, newBet]);
                 setBetForm({ targetPlayerId: '', prediction: 'win', amount: '' });
@@ -1232,12 +1249,12 @@
                     const bettor = updatedPlayers[bettorIndex];
                     const historyBase = Array.isArray(bettor.history) ? bettor.history : [];
                     if (bet.prediction === outcome) {
-                        const payout = bet.amount * 2.5; // 返还本金+盈利
+                        const payout = bet.amount * bet.payoutMultiplier;
                         const updatedHistory = [...historyBase, {
                             date: new Date().toLocaleString(),
                             change: payout,
                             newScore: bettor.score + payout,
-                            effect: `（下注成功：${bet.targetName} ${outcome === 'win' ? '赢' : '输'}，返还 ${payout} 积分）`
+                            effect: `（下注成功：${bet.targetName} ${outcome === 'win' ? '赢' : '输'}，返还 ${payout.toFixed(1)} 积分）`
                         }];
                         updatedPlayers[bettorIndex] = {
                             ...bettor,
