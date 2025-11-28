@@ -1249,7 +1249,7 @@
                     const bettor = updatedPlayers[bettorIndex];
                     const historyBase = Array.isArray(bettor.history) ? bettor.history : [];
                     if (bet.prediction === outcome) {
-                        const payout = bet.amount * bet.payoutMultiplier;
+                        const payout = bet.amount * (1 + bet.payoutMultiplier);
                         const updatedHistory = [...historyBase, {
                             date: new Date().toLocaleString(),
                             change: payout,
