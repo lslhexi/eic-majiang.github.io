@@ -541,8 +541,11 @@
             const [authMode, setAuthMode] = useState('login'); // login | register
             const [authForm, setAuthForm] = useState({ username: '', displayName: '', password: '', confirmPassword: '', adminPass: '' });
             const [firebaseWriteEnabled, setFirebaseWriteEnabled] = useState(false);
+            const [bets, setBets] = useState([]);
+            const [betForm, setBetForm] = useState({ targetPlayerId: '', prediction: 'win', amount: '' });
             const playerSaveTimerRef = useRef(null);
             const roundSaveTimerRef = useRef(null);
+            const betsSaveTimerRef = useRef(null);
             const SAVE_DELAY_MS = 3000;
 
             // 初始化Firebase
@@ -603,6 +606,7 @@
                     // 使用Firebase实时监听
                     const playersRef = db.ref('players');
                     const roundCountRef = db.ref('roundCount');
+                    const betsRef = db.ref('bets');
 
                     playersRef.on('value', (snapshot) => {
                         if (isSaving) return; // 如果正在保存，忽略这次更新
@@ -653,9 +657,21 @@
                         }
                     });
 
+                    betsRef.on('value', (snapshot) => {
+                        if (isSaving) return;
+                        const data = snapshot.val();
+                        if (data) {
+                            const betsArray = Array.isArray(data) ? data : Object.values(data);
+                            setBets(betsArray);
+                        } else {
+                            setBets([]);
+                        }
+                    });
+
                     return () => {
                         playersRef.off();
                         roundCountRef.off();
+                        betsRef.off();
                     };
                 } else {
                     // 使用localStorage（兼容模式）
@@ -679,6 +695,10 @@
                     const savedRoundCount = localStorage.getItem('mahjongRoundCount');
                     if (savedRoundCount) {
                         setRoundCount(parseInt(savedRoundCount, 10));
+                    }
+                    const savedBets = localStorage.getItem('mahjongBets');
+                    if (savedBets) {
+                        setBets(JSON.parse(savedBets));
                     }
                 }
             }, [isFirebaseReady, db]);
@@ -745,6 +765,28 @@
                     localStorage.setItem('mahjongRoundCount', roundCount);
                 }
             }, [roundCount, isFirebaseReady, db, useFirebase, isSaving]);
+
+            // 保存投注数据
+            useEffect(() => {
+                if (isSaving) return;
+                const canWriteFirebase = firebaseWriteEnabled && (isAdmin || currentUser.role === 'player');
+                if (isFirebaseReady && db && useFirebase && canWriteFirebase) {
+                    if (betsSaveTimerRef.current) {
+                        clearTimeout(betsSaveTimerRef.current);
+                    }
+                    setIsSaving(true);
+                    betsSaveTimerRef.current = setTimeout(() => {
+                        db.ref('bets').set(bets).then(() => {
+                            setTimeout(() => setIsSaving(false), 500);
+                        }).catch((error) => {
+                            console.error('保存投注失败:', error);
+                            setIsSaving(false);
+                        });
+                    }, SAVE_DELAY_MS);
+                } else {
+                    localStorage.setItem('mahjongBets', JSON.stringify(bets));
+                }
+            }, [bets, isFirebaseReady, db, useFirebase, isSaving]);
 
             // 段位表数据
             const rankTable = [
@@ -972,6 +1014,71 @@
                 alert(`${player.name} 成功购买 ${item.name}！剩余积分：${player.score - item.price}`);
             };
 
+            const placeBet = () => {
+                if (currentUser.role !== 'player' || !currentUser.playerId) {
+                    alert('请先登录玩家账号再下注');
+                    return;
+                }
+                if (!betForm.targetPlayerId) {
+                    alert('请选择要下注的玩家');
+                    return;
+                }
+                const amount = parseInt(betForm.amount, 10);
+                if (isNaN(amount) || amount <= 0) {
+                    alert('请输入有效的下注积分');
+                    return;
+                }
+                if (amount > 10000) {
+                    alert('单次下注最多 10000 积分');
+                    return;
+                }
+                const bettorIndex = players.findIndex(p => p.id === currentUser.playerId);
+                if (bettorIndex === -1) {
+                    alert('未找到当前玩家，请刷新后重试');
+                    return;
+                }
+                const targetId = parseInt(betForm.targetPlayerId, 10);
+                const targetPlayer = players.find(p => p.id === targetId);
+                if (!targetPlayer) {
+                    alert('未找到目标玩家');
+                    return;
+                }
+                // 扣除下注积分
+                const updatedPlayers = players.map(p => {
+                    if (p.id === currentUser.playerId) {
+                        return {
+                            ...p,
+                            score: p.score - amount,
+                            history: [
+                                ...(Array.isArray(p.history) ? p.history : []),
+                                {
+                                    date: new Date().toLocaleString(),
+                                    change: -amount,
+                                    newScore: p.score - amount,
+                                    effect: `（下注 ${targetPlayer.name} ${betForm.prediction === 'win' ? '会赢' : '会输'}，扣除 ${amount} 积分）`
+                                }
+                            ]
+                        };
+                    }
+                    return p;
+                });
+                setPlayers(updatedPlayers);
+                const timestamp = Date.now();
+                const newBet = {
+                    id: timestamp,
+                    bettorId: currentUser.playerId,
+                    targetPlayerId: targetId,
+                    targetName: targetPlayer.name,
+                    prediction: betForm.prediction,
+                    amount,
+                    status: 'pending',
+                    createdAt: timestamp
+                };
+                setBets([...bets, newBet]);
+                setBetForm({ targetPlayerId: '', prediction: 'win', amount: '' });
+                alert(`下注成功：${targetPlayer.name} 下次${betForm.prediction === 'win' ? '赢' : '输'}`);
+            };
+
             const recordRound = () => {
                 // 确保至少有一个玩家存在
                 if (!Array.isArray(players) || players.length === 0) {
@@ -982,6 +1089,7 @@
                     alert('请先登录玩家账号或进入管理员模式后再记录分数');
                     return;
                 }
+                const roundOutcomes = {};
                 // 更新每个玩家的分数和统计
                 const updatedPlayers = players.map(player => {
                     // 确保player是有效对象
@@ -1086,6 +1194,7 @@
                             newScore: newScore,
                             effect: effectMessage
                         }];
+                        roundOutcomes[player.id] = finalChange > 0 ? 'win' : (finalChange < 0 ? 'lose' : 'draw');
                         
                         return {
                             ...player,
@@ -1111,7 +1220,48 @@
                         };
                     }
                 }).filter(p => p !== null && p !== undefined); // 过滤掉null和undefined值
+
+                const resolvedBets = bets.map(bet => {
+                    if (bet.status !== 'pending') return bet;
+                    const outcome = roundOutcomes[bet.targetPlayerId];
+                    if (!outcome || outcome === 'draw') return bet;
+                    const bettorIndex = updatedPlayers.findIndex(p => p.id === bet.bettorId);
+                    if (bettorIndex === -1) {
+                        return { ...bet, status: 'cancelled', resolvedAt: new Date().toISOString(), reason: 'bettor_missing' };
+                    }
+                    const bettor = updatedPlayers[bettorIndex];
+                    const historyBase = Array.isArray(bettor.history) ? bettor.history : [];
+                    if (bet.prediction === outcome) {
+                        const payout = bet.amount * 2.5; // 返还本金+盈利
+                        const updatedHistory = [...historyBase, {
+                            date: new Date().toLocaleString(),
+                            change: payout,
+                            newScore: bettor.score + payout,
+                            effect: `（下注成功：${bet.targetName} ${outcome === 'win' ? '赢' : '输'}，返还 ${payout} 积分）`
+                        }];
+                        updatedPlayers[bettorIndex] = {
+                            ...bettor,
+                            score: bettor.score + payout,
+                            history: updatedHistory
+                        };
+                        return { ...bet, status: 'won', resolvedAt: new Date().toISOString(), payout };
+                    } else {
+                        const updatedHistory = [...historyBase, {
+                            date: new Date().toLocaleString(),
+                            change: 0,
+                            newScore: bettor.score,
+                            effect: `（下注失败：${bet.targetName} ${outcome === 'win' ? '赢' : '输'}）`
+                        }];
+                        updatedPlayers[bettorIndex] = {
+                            ...bettor,
+                            history: updatedHistory
+                        };
+                        return { ...bet, status: 'lost', resolvedAt: new Date().toISOString(), payout: 0 };
+                    }
+                });
+
                 setPlayers(updatedPlayers);
+                setBets(resolvedBets);
                 // 清空本局输入
                 setRoundScores(prev => {
                     const cleared = {};
@@ -1300,6 +1450,65 @@
                                     </div>
                                 )}
                             </div>
+
+                            {currentUser.role === 'player' && (
+                                <div className="card">
+                                    <h2>下注中心</h2>
+                                    <div className="input-group" style={{flexDirection: 'column', gap: '0.5rem'}}>
+                                        <select
+                                            value={betForm.targetPlayerId}
+                                            onChange={(e) => setBetForm(prev => ({ ...prev, targetPlayerId: e.target.value }))}
+                                            style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}
+                                        >
+                                            <option value="">选择下注玩家</option>
+                                            {players
+                                                .filter(p => p.id !== currentUser.playerId)
+                                                .map(p => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name} (积分: {p.score})
+                                                    </option>
+                                                ))}
+                                        </select>
+                                        <select
+                                            value={betForm.prediction}
+                                            onChange={(e) => setBetForm(prev => ({ ...prev, prediction: e.target.value }))}
+                                            style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}
+                                        >
+                                            <option value="win">预测赢</option>
+                                            <option value="lose">预测输</option>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            placeholder="下注积分"
+                                            value={betForm.amount}
+                                            onChange={(e) => setBetForm(prev => ({ ...prev, amount: e.target.value }))}
+                                            style={{width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem'}}
+                                        />
+                                        <button className="btn btn-primary" style={{width: '100%'}} onClick={placeBet}>
+                                            下 注
+                                        </button>
+                                    </div>
+                                    <div style={{marginTop: '1rem'}}>
+                                        <h3 style={{fontSize: '1rem', marginBottom: '0.5rem'}}>我的下注</h3>
+                                        {bets.filter(b => b.bettorId === currentUser.playerId).length === 0 ? (
+                                            <p style={{color: '#6b7280', fontSize: '0.875rem'}}>暂无下注记录</p>
+                                        ) : (
+                                            <div style={{maxHeight: '200px', overflowY: 'auto'}}>
+                                                {bets
+                                                    .filter(b => b.bettorId === currentUser.playerId)
+                                                    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+                                                    .map(b => (
+                                                        <div key={b.id} style={{border: '1px solid #e5e7eb', borderRadius: '0.375rem', padding: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem'}}>
+                                                            <p>目标：{b.targetName}</p>
+                                                            <p>方向：{b.prediction === 'win' ? '赢' : '输'} | 积分：{b.amount}</p>
+                                                            <p>状态：{b.status === 'pending' ? '待结算' : b.status === 'won' ? `赢 (+${b.payout || 0})` : '输'}</p>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="card">
                                 <h2>记录本局分数</h2>
